@@ -30,7 +30,7 @@ def _preprocess( reference_image, blur_amount ):
 
 inputs = input_data( '/home/cparr/Downloads/jpeg2000_db/db/', 'rapids.bmp' )
 
-def _featuresim(reference_img, distorted,img)
+def _featuresim(reference_img, distorted,img):
 
     img = inputs[0]
     dst = _preprocess( img, 25 )
@@ -50,20 +50,20 @@ def _featuresim(reference_img, distorted,img)
     t3 = 200
     t4 = 200
     
-    s_Q = ( 2*imgQ + dstQ + t4 )  / ( imgQ**2 + dstQ**2 + t4 )
+    s_Q = ( 2*imgQ*dstQ + t4 )  / ( imgQ**2 + dstQ**2 + t4 )
     
-    s_I = ( 2*imgI + dstI + t3 )  / ( imgI**2 + dstI**2 + t3 )
+    s_I = ( 2*imgI*dstI + t3 )  / ( imgI**2 + dstI**2 + t3 )
     
     pc1 = phasepack.phasecong(imgY, nscale = 4, norient = 4, minWaveLength = 6, mult = 2, sigmaOnf=0.55)
     pc2 = phasepack.phasecong(dstY, nscale = 4, norient = 4, minWaveLength = 6, mult = 2, sigmaOnf=0.55)
     pc1 = pc1[0]
     pc2 = pc2[0]
     
-    s_PC = ( 2*pc1 + pc2 + t1 )  / ( pc1**2 + pc2**2 + t1 )
+    s_PC = ( 2*pc1*pc2 + t1 )  / ( pc1**2 + pc2**2 + t1 )
     
     g1 = scharr( imgY )
     g2 = scharr( dstY )
-    s_G = ( 2*g1 + g2 + t2 )  / ( g1**2 + g2**2 + t2 )
+    s_G = ( 2*g1*g2 + t2 )  / ( g1**2 + g2**2 + t2 )
     
     s_L = s_PC * s_G
     s_C = s_I * s_Q

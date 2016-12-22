@@ -1,12 +1,6 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
-"""
-Created on Fri Dec 16 11:48:09 2016
 
-@author: cparr
-"""
-
-# -*- coding: utf-8 -*-
 """
 Created on Tue Sep 20 12:26:13 2016
 
@@ -16,27 +10,23 @@ This script uses a variety of image quality assessment (IQA) metrics to
 determine the similiarity or lack thereof between two images.
 
 """
-
 import glob
-import re
 import phasepack
 import rasterio
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 import pandas as pd
-from collections import defaultdict
 from itertools import combinations
 from skimage.measure import compare_ssim as ssim
 from skimage.measure import compare_mse as mse
 from scipy import signal
 from scipy import fftpack
 from matplotlib import six
-import pylab
 
 # Globals go here
-    
 master = dict()
+compare_years_l1 = dict()
          
 def input_data(path_to_snow_data, y1,y2,x1,ix2):
     
@@ -56,8 +46,8 @@ def input_data(path_to_snow_data, y1,y2,x1,ix2):
         
         roi_img = src_img[y1:y2,x1:ix2]
         
-        plt.figure()
-        plt.imshow(roi_img)    
+        #plt.figure()
+        #plt.imshow(roi_img)    
 
         name = f.split('/')[-1]
         name = filter(lambda x: x.isdigit(), name)
@@ -72,8 +62,6 @@ def input_data(path_to_snow_data, y1,y2,x1,ix2):
             
     print "Source shape: " + str(src_img.shape)
     print "ROI shape: " + str(roi_img.shape)
-        
-input_data('/home/cparr/surfaces/depth_ddems/hv/',4400,4800,475,555)
 
 def create_pairs():
     '''
@@ -93,9 +81,6 @@ def create_pairs():
         
     print "Creating " + str(len(compare_years_l1.keys())) + " Unique Map Pairs"
         
-compare_years_l1 = dict()
-create_pairs()
-  
 def convolve(image, kernel):
     
 	# grab the spatial dimensions of the image, along with
@@ -141,8 +126,8 @@ def discostrans(reference, target):
     
     reference_transform = fftpack.dct( reference )
     target_transform = fftpack.dct( target )
-    reference_curve = reference_transform.mean(axis = 1)
-    target_curve = target_transform.mean(axis = 1)
+    reference_curve = reference_transform.mean(axis = 0) #
+    target_curve = target_transform.mean(axis = 0)
 
     return reference_transform, target_transform, reference_curve, target_curve
 
@@ -180,7 +165,6 @@ def gmsd(reference, target):
     
     return gms_index, gms_map
 
-
 def ft_sim(reference, target):
     
     """
@@ -192,12 +176,9 @@ def ft_sim(reference, target):
     IEEE Transactions on Image Processing, 20(8), 2378–2386. 
     http://doi.org/10.1109/TIP.2011.2109730
     """
-    
-    # Convert the input images to YIQ color space
-    # Y is the luma compenent, i.e. B & W
-    # imgY = 0.299 * r + 0.587 * g + 0.114 * b
 
     # Constants provided by the authors
+    
     t1 = 0.85
     t2 = 160
     
@@ -214,7 +195,7 @@ def ft_sim(reference, target):
     pc2 = pc2[0]  # Distorted PC map
     
     # Similarity of PC components
-    s_PC = ( 2*pc1 + pc2 + t1 )  / ( pc1**2 + pc2**2 + t1 )
+    s_PC = ( 2*pc1*pc2 + t1 )  / ( pc1**2 + pc2**2 + t1 )
     
     # compute the Scharr gradient magnitude representation of the images
     # in both the x and y direction
@@ -233,7 +214,7 @@ def ft_sim(reference, target):
 
     # The gradient magnitude similarity
 
-    s_G = (2*refgradient + targradient + t2) / (refgradient**2 + targradient**2 + t2)
+    s_G = (2*refgradient*targradient + t2) / (refgradient**2 + targradient**2 + t2)
     
     s_L = s_PC * s_G  # luma similarity
     
@@ -242,7 +223,6 @@ def ft_sim(reference, target):
     fsim = round( np.nansum( s_L * pcM) / np.nansum(pcM), 3)
     
     return fsim
-
 
 def cw_ssim(reference, target, width):
     
@@ -288,11 +268,6 @@ def cw_ssim(reference, target, width):
         
         return cw_ssim_index, cw_ssim_map
 
-###
-
-# plot and save as we go. bring in seamless 4 panel from hv depth maps
-
-###
 def do_all_metrics():
     
     pairs = [k for k in compare_years_l1.iterkeys()]
@@ -329,244 +304,204 @@ def do_all_metrics():
         compare_years_l1[p]['DCT Graph '+yr2] = tr_res[3]
 
         compare_years_l1[p]['FSIM'] = ft_sim(compare_years_l1[p][yr1],compare_years_l1[p][yr2])
-        
+
+
+input_data('/home/cparr/surfaces/depth_ddems/hv/',4400,4800,475,555)
+create_pairs()
 do_all_metrics()
-                                     
-def plot_similarity_maps(metric_key):
+input_data('/home/cparr/surfaces/level_1_surfaces/hv/bare_earth/',4400,4800,475,555)
+bare = master['2012_158']
+del master['2012_158']
+
+def render_mpl_table(data, roi_name, col_width=3.0, row_height=0.5, font_size=14,
+                     header_color='#236192', row_colors=['#C7C9C7', 'w'],
+                     edge_color='w',bbox=[0, 0, 1, 1], header_columns=0,
+                     ax=None, **kwargs):
+    if ax is None:
+        size = (np.array(data.shape[::-1]) + np.array([0, 1])) * np.array([col_width, row_height])
+        fig, ax = plt.subplots(figsize=size)
+        ax.axis('off')
+
+    mpl_table = ax.table(cellText = data.values, rowLabels = data.index,
+                         bbox=bbox, colLabels=data.columns, **kwargs)
+
+    mpl_table.auto_set_font_size(False)
+    mpl_table.set_fontsize(font_size)
     
-    img_ls = []
-    
-    pairs = [k for k in compare_years_l1.iterkeys()]  
-             
-    for p in pairs:
-        img = compare_years_l1[p][metric_key]
-        img_ls.append(img)
+    for k, cell in six.iteritems(mpl_table._cells):
+        cell.set_edgecolor(edge_color)
         
-    plt.figure(figsize=(8,5))
+        if k[0] == 0 or k[1] < header_columns:
+            cell.set_text_props(weight='bold', color='#FFCD00')
+            cell.set_facecolor(header_color)
+        else:
+            cell.set_facecolor(row_colors[k[0]%len(row_colors) ])
+    plt.savefig('/home/cparr/Snow_Patterns/figures/'+roi_name+'_table.png',
+        dpi = 300)
+    return ax
+
+def make_roi_map(roi_name, cmin, cmax):
     
-    ax1 = plt.subplot(161)
-    plt.imshow(img_ls[0])
-    plt.yticks( [0,100,200,300,399] )
-    plt.xticks( [0,40,80] )
-    plt.xlim(-5,85)
-    xtlabels = ['0','80','160']
-    ytlabels = ['0','200','400','600','800']
-    ax1.set_xticklabels(xtlabels)
-    ax1.set_yticklabels(ytlabels)
-    plt.xlabel( 'm', fontsize = 10)
-    plt.ylabel( 'm', fontsize = 10)
+    fig, axs = plt.subplots(1,4, figsize=(8, 5), facecolor='w', edgecolor='k')
+    fig.subplots_adjust(top = 0.85, bottom = 0.14, wspace = 0.1)
+      
+    axs = axs.ravel()
+    yrs = [k for k in master.iterkeys()]
+    yrs.sort()  
+    i = 0
+    for y in yrs:
+        
+        im = axs[i].imshow(master[y][y+'_roi'], cmap = 'viridis', vmin=cmin, vmax=cmax)
+        axs[i].axhline(y=250, color ='r') # to plot a transect comment this in or out
+        axs[i].set_title(str(y), fontsize = 12)
+        
+        if i == 0:
+            axs[i].set_yticks( [0,100,200,300] )
+            axs[i].set_xticks( [0, 25,50,75] )
+            axs[i].set_xticklabels(['0','50','100','150'], size = 7)
+            axs[i].set_yticklabels(['0','200','400','600'],size = 7)
+            axs[i].set_ylabel('m',size = 7)
+            axs[i].set_xlabel('m',size = 7)
+            i+=1
+        else:
+            axs[i].set_yticklabels( [] )
+            axs[i].set_xticklabels( [] )
+            i+=1
 
-    ax2 = plt.subplot(162, sharey=ax1)
-    plt.imshow(img_ls[1])
-    plt.tick_params(
-    axis='both',
-    which='both',
-    bottom='off',
-    left = 'off',
-    right = 'off',
-    top='off',
-    labelbottom='off',
-    labelleft='off')
+    plt.suptitle('Snow Depth [m]',size=14)
+    cbar_ax = fig.add_axes([0.25, 0.05, 0.5, 0.03])
+    fig.colorbar(im, cax=cbar_ax, orientation = 'horizontal')
 
-    ax3 = plt.subplot(163, sharey=ax1)
-    plt.imshow(img_ls[2])
-    plt.tick_params(
-    axis='both',
-    which='both',
-    bottom='off',
-    left = 'off',
-    right = 'off',
-    top='off',
-    labelbottom='off',
-    labelleft='off')
-
-    ax4 = plt.subplot(164, sharey=ax1)
-    plt.imshow(img_ls[3])
-    plt.tick_params(
-    axis='both',
-    which='both',
-    bottom='off',
-    left = 'off',
-    right = 'off',
-    top='off',
-    labelbottom='off',
-    labelleft='off')
-
-    ax5 = plt.subplot(165, sharey=ax1)
-    plt.imshow(img_ls[4])
-    plt.tick_params(
-    axis='both',
-    which='both',
-    bottom='off',
-    left = 'off',
-    right = 'off',
-    top='off',
-    labelbottom='off',
-    labelleft='off')
-
-    ax6 = plt.subplot(166, sharey=ax1)
-    plt.imshow(img_ls[5])
-    plt.tick_params(
-    axis='both',
-    which='both',
-    bottom='off',
-    left = 'off',
-    right = 'off',
-    top='off',
-    labelbottom='off',
-    labelleft='off')
+    plt.savefig('/home/cparr/Snow_Patterns/figures/'+roi_name+'_roi_map.png',
+            dpi = 300)
     
-    cbar = plt.colorbar()
+make_roi_map('lake_cutbank',0,2.5)
 
+def make_slice(y_transect):
+    yrs = [k for k in master.iterkeys()]
+    for y in yrs:
+        
+        master[y][y+'_roi_transect'] = master[y][y+'_roi'][y_transect]
+    bare['transect']=bare['2012_158_roi'][y_transect]
+                
+make_slice(250)
+
+# plot surfaces
+plt.plot(master['2013_103']['2013_103_roi_transect']+bare['transect'],label='Winter 2013')
+plt.plot(master['2016_096']['2016_096_roi_transect']+bare['transect'],label='Winter 2016')
+ax = plt.plot(bare['transect'],color = 'k',lw=2.5,label='Bare Earth')
+plt.xlabel('meters')
+plt.ylabel('elevation [m]')
+plt.legend()
+ticks = range(0,80,10)
+labels = [str(n*2) for n in ticks]
+plt.xticks(ticks,labels)
+plt.tight_layout()
+plt.savefig('/home/cparr/Snow_Patterns/figures/transect_2013_2016.png',dpi = 300)
+plt.close()
+# plot surfaces
+plt.plot(master['2012_107']['2012_107_roi_transect']+bare['transect'],label='Winter 2012')
+plt.plot(master['2015_096']['2015_096_roi_transect']+bare['transect'],label='Winter 2015')
+ax = plt.plot(bare['transect'],color = 'k',lw=2.5,label='Bare Earth')
+plt.xlabel('meters')
+plt.ylabel('elevation [m]')
+plt.legend()
+ticks = range(0,80,10)
+labels = [str(n*2) for n in ticks]
+plt.xticks(ticks,labels)
+plt.tight_layout()
+plt.savefig('/home/cparr/Snow_Patterns/figures/transect_2012_2015.png',dpi = 300)
+
+#plot all profiles
+plt.plot(master['2012_107']['2012_107_roi_transect']+bare['transect'],label='Winter 2012')
+plt.plot(master['2013_103']['2013_103_roi_transect']+bare['transect'],label='Winter 2013')
+plt.plot(master['2015_096']['2015_096_roi_transect']+bare['transect'],label='Winter 2015')
+plt.plot(master['2016_096']['2016_096_roi_transect']+bare['transect'],label='Winter 2016')
+ax = plt.plot(bare['transect'],color = 'k',lw=2.5,label='Bare Earth')
+plt.xlabel('meters')
+plt.ylabel('elevation [m]')
+plt.legend()
+ticks = range(0,80,10)
+labels = [str(n*2) for n in ticks]
+plt.xticks(ticks,labels)
+plt.tight_layout()
+plt.savefig('/home/cparr/Snow_Patterns/figures/all_transects.png',dpi = 300)
+
+
+def make_score_map_figure(roi_name, score, cmin, cmax):
     
-    plt.subplots_adjust(wspace=0, hspace=0, top = 0.85)
-    plt.suptitle("Happy Valley "+metric_key+'s',fontsize = 14)
-plot_similarity_maps('MSE Map')
+    fig, axs = plt.subplots(1,6, figsize=(8, 5), facecolor='w', edgecolor='k')
+    fig.subplots_adjust(top = 0.85, bottom = 0.14)
+    
+    axs = axs.ravel()
+    pairs = [k for k in compare_years_l1.iterkeys()]  
+    i = 0
+    for p in pairs:
+        
+        im = axs[i].imshow(compare_years_l1[p][score], cmap = 'viridis', vmin=cmin, vmax=cmax)
+        axs[i].set_title(p + '\n'+score[:-3] + '= ' + str(compare_years_l1[p][score[:-4]]),
+            fontsize = 7)
+        if i == 0:
+            axs[i].set_yticks( [0,100,200,300] )
+            axs[i].set_xticks( [0, 25,50,75] )
+            axs[i].set_xticklabels(['0','50','100','150'], size = 7)
+            axs[i].set_yticklabels(['0','200','400','600'],size = 7)
+            axs[i].set_ylabel('m',size = 7)
+            axs[i].set_xlabel('m',size = 7)
+            i+=1
+        else:
+            axs[i].set_yticklabels( [] )
+            axs[i].set_xticklabels( [] )
+            i+=1
 
 
-#def make_plots(roi, comparison_dict):
-#    for j in comparison_dict.keys():
-#      
-#        titles = [x for x in comparison_dict[j] if
-#        type(comparison_dict[j][x]) != float and
-#        len(comparison_dict[j][x].shape) == 2]
-#        titles = sorted(titles)
-#        titles.insert(1, titles.pop(2))
-#       
-#        curves = [x for x in comparison_dict[j] if
-#        type(comparison_dict[j][x]) != float and
-#        len(comparison_dict[j][x].shape) == 1]
-#       
-#        i=1
-#       
-#        fig, axes = plt.subplots(nrows = 3, ncols = 3)
-#        
-#        plt.subplots_adjust(hspace = 0.5, wspace = 0.5)
-#       
-#        plt.suptitle(roi + ' ' + j + ' Snow Pattern Comparison')
-#       
-#        for name in titles:
-#            ax1 = plt.subplot(3,3,i)
-#            ax1.xaxis.set_visible(False)
-#            ax1.yaxis.set_visible(False)
-#            ax1.set_title(name, fontsize = 9)
-#            im1 = ax1.imshow(comparison_dict[j][name], cmap = 'viridis')
-#            i+=1
-#           
-#        plt.subplot(3,3,i)
-#        plt.plot(comparison_dict[j][curves[0]], label = curves[0][0:4])
-#        plt.plot(comparison_dict[j][curves[1]], label = curves[1][0:4])
-#        plt.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3, fontsize = 7,
-#           ncol=2, mode="expand", borderaxespad=0.)
-#        plt.yscale('log')
-#        plt.xlim([0, len(comparison_dict[j][curves[0]])])
-#        #plt.ylim([0,2])
-#        plt.xticks([0,len(comparison_dict[j][curves[0]]) / 2,
-#                    len(comparison_dict[j][curves[0]])], size = 6)
-#        #plt.yticks([])
+    plt.suptitle(score + ' Comparisons',size=12)
+    cbar_ax = fig.add_axes([0.25, 0.05, 0.5, 0.03])
+    fig.colorbar(im, cax=cbar_ax, orientation = 'horizontal')
+
+    plt.savefig('/home/cparr/Snow_Patterns/figures/'+roi_name+'_'+score+'.png',
+            dpi = 300)
+
+make_score_map_figure('lake_cutbank', 'MSE Map', 0,1)
+make_score_map_figure('lake_cutbank', 'SSIM Map',-1,1)
+make_score_map_figure('lake_cutbank', 'CW-SSIM Map',0,1)
+make_score_map_figure('lake_cutbank', 'GMSD Map',0,1)
+
+
+def make_dct_graph(roi_name):
+    
+    dct_2016 = compare_years_l1['2015 vs. 2016']['DCT Graph 2016_096']
+    dct_2015 = compare_years_l1['2015 vs. 2016']['DCT Graph 2015_096']
+    dct_2013 = compare_years_l1['2013 vs. 2012']['DCT Graph 2013_103']
+    dct_2012 = compare_years_l1['2013 vs. 2012']['DCT Graph 2012_107']
+    
+    plt.plot(dct_2012, lw = 2, label = '2012')
+    plt.plot(dct_2013, lw = 2, label = '2013')
+    plt.plot(dct_2015, lw = 2, label = '2015')
+    plt.plot(dct_2016, lw = 2, label = '2016')
+    plt.legend()
+    
+    plt.savefig('/home/cparr/Snow_Patterns/figures/'+roi_name+'_dct.png',
+        dpi = 300)
+    
+make_dct_graph('lake_cut_bank')
+
+
+# make df to render table
+df = pd.DataFrame.from_dict(compare_years_l1)
+df = df.T
+df = df[['MSE','SSIM','CW-SSIM','FSIM','GMSD']]
+df['MSE Rank'] = df['MSE'].rank(ascending = True)
+df['SSIM Rank'] = df['SSIM'].rank(ascending = False)
+df['CW-SSIM Rank'] = df['CW-SSIM'].rank(ascending = False)
+df['FSIM Rank'] = df['FSIM'].rank(ascending = False)
+df['GMSD Rank'] = df['GMSD'].rank(ascending = True)
+df = df.sort_values(['MSE'])
+ranks = df[['MSE Rank', 'SSIM Rank', 'CW-SSIM Rank', 'FSIM Rank', 'GMSD Rank']]
+score_df = df[['MSE','SSIM','CW-SSIM','FSIM','GMSD']]
+render_mpl_table(score_df, 'lake_cutbank_scores')
+render_mpl_table(ranks, 'lake_cutbank_ranks')
 #
-#       
-#        textstr = 'MSE = %s, SSIM = %s, CW-SSIM = %s, GMS = %s, FSIM = %s' % (
-#        comparison_dict[j]['MSE'],comparison_dict[j]['SSIM'],
-#        comparison_dict[j]['CW-SSIM'],comparison_dict[j]['GMS'],
-#        comparison_dict[j]['FSIM'])
-#        
-#        props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-#       
-#        fig.text(0.15, 0.05, textstr, fontsize=8,
-#               verticalalignment='top', bbox=props)
-#     
-#        plt.savefig('/home/cparr/Snow_Patterns/figures/hv_toolbox_results/' +
-#                    j + '_' + roi + '.png',
-#                    dpi = 300, bbox_inches = 'tight')                                        
-#
-#def render_mpl_table(data, col_width=5.0, row_height=0.625, font_size=12,
-#                     header_color='#236192', row_colors=['#C7C9C7', 'w'],
-#                     edge_color='w',bbox=[0, 0, 1, 1], header_columns=0,
-#                     ax=None, **kwargs):
-#    if ax is None:
-#        size = (np.array(data.shape[::-1]) + np.array([0, 1])) * np.array([col_width, row_height])
-#        fig, ax = plt.subplots(figsize=size)
-#        ax.axis('off')
-#
-#    mpl_table = ax.table(cellText = data.values, rowLabels = data.index,
-#                         bbox=bbox, colLabels=data.columns, **kwargs)
-#
-#    mpl_table.auto_set_font_size(False)
-#    mpl_table.set_fontsize(font_size)
-#    
-#    for k, cell in six.iteritems(mpl_table._cells):
-#        cell.set_edgecolor(edge_color)
-#        
-#        if k[0] == 0 or k[1] < header_columns:
-#            cell.set_text_props(weight='bold', color='#FFCD00')
-#            cell.set_facecolor(header_color)
-#        else:
-#            cell.set_facecolor(row_colors[k[0]%len(row_colors) ])
-#    return ax
 
 
 
-#==============================================================================
-# for d in zip(dfs, comp_dicts, all_names):
-#     
-#     d[0] = pd.DataFrame.from_dict(d[1])
-#     d[0] = d[0].T
-#     d[0].index.name = 'Comparison Years'
-#     d[0]['Region'] = 'd[2]'
-#     d[0].set_index('Region', append=True, inplace=True)
-#     d[0] = d[0].reorder_levels(['Region','Comparison Years'])
-#     for c in d[0].columns:
-#         if type(d[0][c][0]) != float or d[0][c].isnull().any()==True:
-#             del d[0][c]
-# 
-#==============================================================================
-#polygon_df = pd.DataFrame.from_dict(polygon_comparison_dict)
-#polygon_df = polygon_df.T
-#polygon_df.index.name = 'Comparison Years'
-#polygon_df['Region'] = 'Polygon'
-#polygon_df.set_index('Region', append=True, inplace=True)
-#polygon_df = polygon_df.reorder_levels(['Region','Comparison Years'])
-#for c in polygon_df.columns:
-#    if type(polygon_df[c][0]) != float or polygon_df[c].isnull().any()==True:
-#        del polygon_df[c]
-#west_drift_df = pd.DataFrame.from_dict(west_drift_comparison_dict)
-#west_drift_df = west_drift_df.T
-#west_drift_df.index.name = 'Comparison Years'
-#west_drift_df['Region'] = 'West Drift'
-#west_drift_df.set_index('Region', append=True, inplace=True)
-#west_drift_df = west_drift_df.reorder_levels(['Region','Comparison Years'])
-#for c in west_drift_df.columns:
-#    if type(west_drift_df[c][0]) != float or west_drift_df[c].isnull().any()==True:
-#        del west_drift_df[c]
-#twin_drift_df = pd.DataFrame.from_dict(twin_drift_comparison_dict)
-#twin_drift_df = twin_drift_df.T
-#twin_drift_df.index.name = 'Comparison Years'
-#twin_drift_df['Region'] = 'Twin Drifts'
-#twin_drift_df.set_index('Region', append=True, inplace=True)
-#twin_drift_df = twin_drift_df.reorder_levels(['Region','Comparison Years'])
-#for c in twin_drift_df.columns:
-#    if type(twin_drift_df[c][0]) != float or twin_drift_df[c].isnull().any()==True:
-#        del twin_drift_df[c]
-#no_drift_df = pd.DataFrame.from_dict(no_drift_comparison_dict)
-#no_drift_df = no_drift_df.T
-#no_drift_df.index.name = 'Comparison Years'
-#no_drift_df['Region'] = 'No Drifts'
-#no_drift_df.set_index('Region', append=True, inplace=True)
-#no_drift_df = no_drift_df.reorder_levels(['Region','Comparison Years'])
-#for c in no_drift_df.columns:
-#    if type(no_drift_df[c][0]) != float or no_drift_df[c].isnull().any()==True:
-#        del no_drift_df[c]
-
-#master_df = no_drift_df.append(polygon_df)
-#master_df = master_df.append(twin_drift_df)
-#master_df = master_df.append(west_drift_df)
-#master_df = master_df.append(snow_df)
-#
-#del polygon_df
-#del twin_drift_df
-#del west_drift_df
-#del snow_df
-
-#render_mpl_table(master_df)
-#plt.savefig('/home/cparr/testtable.png')
